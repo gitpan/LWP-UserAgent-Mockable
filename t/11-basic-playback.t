@@ -1,0 +1,45 @@
+#!perl
+
+# test basic usage, no callbacks, in playback mode
+
+BEGIN {
+    $ENV{ LWP_UA_MOCK } = 'playback';
+    $ENV{ LWP_UA_MOCK_FILE } = 'basic.mockdata';
+}
+
+use strict;
+use warnings;
+
+use LWP;
+use LWP::UserAgent::Mockable;
+use Test::More tests => 6;
+
+my $ua = LWP::UserAgent->new;
+is( ref $ua, 'LWP::UserAgent', 'mocked LWP::UA is still a LWP::UA' );
+
+my $get = $ua->get( "http://www.google.com" );
+is( ref $get, 'HTTP::Response', 'and responses from requests are as per LWP::UA' );
+ok( defined $get->code, "...which respond to LWP methods in an expected manner" );
+
+SKIP: {
+    skip "GET of www.google.com didn't succeed, skipping comparison tests", 2
+      unless $get->code == 200;
+
+    my %expected = (
+        code        => 200,
+        protocol    => 'HTTP/1.1',
+    );
+
+    foreach my $method ( sort keys %expected ) {
+        my $expected = $expected{ $method };
+
+        is ( $get->$method, $expected, "$method method returns expected value" );
+    }
+}
+
+# not doing much with this, just here so that can ensure that multiple
+# requests work, and that can support methods other than get.
+my $post = $ua->post( "http://www.google.com" );
+is( ref $post, "HTTP::Response", 'post returns an HTTP::Response object' );
+
+LWP::UserAgent::Mockable->finished;
