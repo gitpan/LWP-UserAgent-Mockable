@@ -7,7 +7,7 @@ use Hook::LexWrap;
 use LWP::UserAgent;
 use Storable qw( dclone nstore retrieve );
 
-our $VERSION = '0.90';
+our $VERSION = '1.00';
 
 my $action = defined $ENV{ LWP_UA_MOCK } ? lc $ENV{ LWP_UA_MOCK } : 'passthrough';
 
