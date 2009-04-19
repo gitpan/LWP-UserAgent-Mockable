@@ -13,10 +13,11 @@ use LWP::UserAgent::Mockable;
 use Storable;
 use Test::More tests => 10;
 
-use constant NON_EXISTING_URL => "http://non_existing_url";
+use constant URL => "http://google.com";
 
 my $ua = LWP::UserAgent->new;
 $ua->timeout( 3 );
+$ua->env_proxy;
 
 my $cb = sub {
     my ( $request, $response ) = @_;
@@ -28,14 +29,14 @@ my $cb = sub {
 
 LWP::UserAgent::Mockable->set_playback_callback( $cb );
 
-my $original_is_999 = $ua->get( NON_EXISTING_URL );
+my $original_is_999 = $ua->get( URL );
 is( ref $original_is_999, 'HTTP::Response', "HTTP::Response returned" );
 is( $original_is_999->code, 998, "...and it returns the modified response" );
 
 # clear the callback
 LWP::UserAgent::Mockable->set_playback_callback();
 
-my $original_is_777 = $ua->get( NON_EXISTING_URL );
+my $original_is_777 = $ua->get( URL );
 is( ref $original_is_777, 'HTTP::Response', "HTTP::Response returned" );
 is( $original_is_777->code, 777, "...and it is as the original" );
 
@@ -52,9 +53,9 @@ is( ref $validation_failure, 'HTTP::Response', "HTTP::Response returned" );
 is( $validation_failure->code, 999, '...and it returns the expected response' );
 is( $same, 0, "Requested URI isn't the one that was mocked" );
 
-my $validation_success = $ua->get( NON_EXISTING_URL );
+my $validation_success = $ua->get( URL );
 is( ref $validation_success, 'HTTP::Response', "HTTP::Response returned" );
-is( $validation_success->code, 500, "...and it returns the expected response" );
+isnt( $validation_success->code, 999, "...and it returns the expected response" );
 is( $same, 1, "Requested URI isthe one that was mocked" );
 
 LWP::UserAgent::Mockable->finished;

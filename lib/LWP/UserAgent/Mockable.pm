@@ -12,7 +12,7 @@ our $VERSION = '0.90';
 my $action = defined $ENV{ LWP_UA_MOCK } ? lc $ENV{ LWP_UA_MOCK } : 'passthrough';
 
 if ( $action !~ /^(playback|record|passthrough)$/ ) {
-    die "env var LWP_UA_MOCK should be set to either 'playback' (the default) or 'record'.  For normal passthrough (no playback or record), don't set this var";
+    die "env var LWP_UA_MOCK should be set to either 'passthrough' (the default), 'playback' or 'record'.";
 }
 
 if ( $action ne 'passthrough' ) {

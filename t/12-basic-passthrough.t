@@ -16,6 +16,8 @@ use Test::More tests => 6;
 my $ua = LWP::UserAgent->new;
 is( ref $ua, 'LWP::UserAgent', 'mocked LWP::UA is still a LWP::UA' );
 
+$ua->env_proxy;
+
 my $get = $ua->get( "http://www.google.com" );
 is( ref $get, 'HTTP::Response', 'and responses from requests are as per LWP::UA' );
 ok( defined $get->code, "...which respond to LWP methods in an expected manner" );

@@ -1,5 +1,9 @@
 Revision history for LWP-UserAgent-Mockable
 
-0.01    Date/time
+0.90    Date/time
         First version, released on an unsuspecting world.
 
+1.00    2009-04-19
+        No functionality changes
+            - Added dependany on B::Deparse
+            - Update unittests to be quicker
