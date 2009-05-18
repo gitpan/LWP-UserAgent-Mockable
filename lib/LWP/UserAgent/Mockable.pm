@@ -7,7 +7,7 @@ use Hook::LexWrap;
 use LWP::UserAgent;
 use Storable qw( dclone nstore retrieve );
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 my $action = defined $ENV{ LWP_UA_MOCK } ? lc $ENV{ LWP_UA_MOCK } : 'passthrough';
 
@@ -152,7 +152,7 @@ LWP::UserAgent::Mockable - Permits recording, and later playing back of LWP requ
 
 =head1 VERSION
 
-Version 0.90
+Version 1.01
 
 =head1 SYNOPSIS
 

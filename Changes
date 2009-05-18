@@ -7,3 +7,7 @@ Revision history for LWP-UserAgent-Mockable
         No functionality changes
             - Added dependany on B::Deparse
             - Update unittests to be quicker
+
+1.01    2009-05-18
+        No functionality changes
+            - Added dependancy on URI to avoid spurious test failures

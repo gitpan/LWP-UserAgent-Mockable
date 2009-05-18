@@ -17,6 +17,7 @@ WriteMakefile(
         'Hook::LexWrap' => 0,
         'LWP'           => 0,
         'B::Deparse'    => 0.61,
+        'URI'           => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'LWP-UserAgent-Mockable-*' },
