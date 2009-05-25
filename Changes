@@ -11,3 +11,9 @@ Revision history for LWP-UserAgent-Mockable
 1.01    2009-05-18
         No functionality changes
             - Added dependancy on URI to avoid spurious test failures
+
+1.10    2009-05-25
+        - Allowed resetting of the action within a session.  Some error
+        messages changed as a result, but no other API changes.
+        - Get around HTTP/1.0 only proxies failing unittests.
+

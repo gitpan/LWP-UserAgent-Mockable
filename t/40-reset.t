@@ -1,19 +1,17 @@
 #!perl
 
-BEGIN {
-    $ENV{ LWP_UA_MOCK } = 'record';
-    $ENV{ LWP_UA_MOCK_FILE } = 'callbacks.mockdata';
-}
-
 use strict;
 use warnings;
 
 use LWP;
 use LWP::UserAgent::Mockable;
 use Storable;
-use Test::More tests => 9;
+use Test::More tests => 13;
 
 use constant URL => "http://google.com";
+use constant RECORD_FILE => 'reset.mockdata';
+
+LWP::UserAgent::Mockable->reset( record => RECORD_FILE );
 
 my $pre_cb = sub {
     my ( $request ) = @_;
@@ -86,6 +84,42 @@ eval {
     $no_response_returned_post = $ua->get( URL );
 };
 ok( defined $@, "Error is thrown when post-callback doesn't return an HTTP::Response object" );
+
+LWP::UserAgent::Mockable->finished;
+
+#
+# PLAYBACK
+#
+
+LWP::UserAgent::Mockable->reset( playback => RECORD_FILE );
+
+my $pb_pre_and_post = $ua->get( URL );
+is(
+    $pb_pre_and_post->as_string,
+    $pre_and_post->as_string,
+    "playback returns same response as recorded with pre- and post-callbacks"
+);
+
+my $pb_pre = $ua->get( URL );
+is(
+    $pb_pre->as_string,
+    $pre->as_string,
+    "playback returns same response as recorded with pre-callback"
+);
+
+my $pb_post = $ua->get( URL );
+is(
+    $pb_post->as_string,
+    $post->as_string,
+    "playback returns same response as recorded with post-callback"
+);
+
+my $pb_unfaked = $ua->get( URL );
+is(
+    $pb_unfaked->as_string,
+    $unfaked->as_string,
+    "playback returns same response as recorded with no callbacks"
+);
 
 LWP::UserAgent::Mockable->finished;
 

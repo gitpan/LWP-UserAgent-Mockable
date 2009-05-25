@@ -11,7 +11,7 @@ use warnings;
 
 use LWP;
 use LWP::UserAgent::Mockable;
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 my $ua = LWP::UserAgent->new;
 is( ref $ua, 'LWP::UserAgent', 'mocked LWP::UA is still a LWP::UA' );
@@ -22,20 +22,14 @@ my $get = $ua->get( "http://www.google.com" );
 is( ref $get, 'HTTP::Response', 'and responses from requests are as per LWP::UA' );
 ok( defined $get->code, "...which respond to LWP methods in an expected manner" );
 
-SKIP: {
-    skip "GET of www.google.com didn't succeed, skipping comparison tests", 2
-      unless $get->code == 200;
+my @methods = qw(
+    code
+    protocol
+    as_string
+);
 
-    my %expected = (
-        code        => 200,
-        protocol    => 'HTTP/1.1',
-    );
-
-    foreach my $method ( sort keys %expected ) {
-        my $expected = $expected{ $method };
-
-        is ( $get->$method, $expected, "$method method returns expected value" );
-    }
+foreach my $method ( @methods ) {
+    ok ( defined $get->$method, "$method method returns expected value" );
 }
 
 # not doing much with this, just here so that can ensure that multiple

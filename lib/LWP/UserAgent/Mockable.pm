@@ -7,139 +7,197 @@ use Hook::LexWrap;
 use LWP::UserAgent;
 use Storable qw( dclone nstore retrieve );
 
-our $VERSION = '1.01';
+our $VERSION = '1.10';
 
-my $action = defined $ENV{ LWP_UA_MOCK } ? lc $ENV{ LWP_UA_MOCK } : 'passthrough';
+my $instance = __PACKAGE__->__instance;
+sub __instance {
+    my ( $class ) = @_;
 
-if ( $action !~ /^(playback|record|passthrough)$/ ) {
-    die "env var LWP_UA_MOCK should be set to either 'passthrough' (the default), 'playback' or 'record'.";
-}
+    if ( not defined $instance ) {
+        $instance = bless {
+            action          => undef,
+            file            => undef,
+            current_request => undef,
+            actions         => [],
+            callbacks       => {},
+            wrappers        => {},
+        }, $class;
 
-if ( $action ne 'passthrough' ) {
-    if ( not defined $ENV{ LWP_UA_MOCK_FILE } ) {
-        die "env var LWP_UA_MOCK_FILE should point to the file that you wish to record to or playback from";
+        my $action = defined $ENV{ LWP_UA_MOCK }
+          ? lc $ENV{ LWP_UA_MOCK }
+          : 'passthrough';
+
+        $instance->reset( $action, $ENV{ LWP_UA_MOCK_FILE } );
     }
+
+    return $instance;
 }
 
-my $file = $ENV{ LWP_UA_MOCK_FILE };
+sub reset {
+    my ( $class, $action, $file ) = @_;
 
-my ( $current_request, @actions, $callbacks );
-$callbacks = {};
+    if ( scalar @{ $instance->{ actions } } ) {
+        die "Can't reset state whilst pending actions.  Need to call finish first";
+    }
 
-if ( $action eq 'playback' ) {
-    local $Storable::Eval = 1;
+    if ( not defined $action ) {
+        $action = "passthrough";
+    }
 
-    @actions = @{ retrieve( $file ) };
+    if ( $action !~ /^(playback|record|passthrough)/ ) {
+        die "Action must be one of 'passthrough', 'playback' or 'record'";
+    }
 
-    wrap LWP::UserAgent::simple_request,
-        pre     => sub {
-            my ( $self, $request ) = @_;
+    if ( $action ne 'passthrough' and not defined $file ) {
+        die "No file defined.  Should point to file you wish to record to or playback from";
+    }
 
-            my $current = shift @actions;
-            if ( not defined $current ) {
-                die "No further HTTP requests exist.  You possibly need to re-record the LWP session";
-            }
+    $instance->{ wrappers } = {};
+    $instance->{ action } = $action;
+    $instance->{ file } = $file;
+    $instance->{ callbacks } = {};
 
-            my $response = $current->{ response };
+    $instance->__reset;
+}
 
-            if ( $callbacks->{ playback_validation } ) {
-                my $mock_request = $current->{ request };
+sub __reset {
+    my ( $self ) = @_;
 
-                $callbacks->{ playback_validation }( $request, $mock_request );
-            }
+    my ( $action, $file, $callbacks, $wrappers )
+      = @{ $self }{ qw( action file callbacks wrappers ) };
 
-            if ( $callbacks->{ playback }) {
-                $response = $callbacks->{ playback }( $request, $response );
+    if ( $action eq 'playback' ) {
+        local $Storable::Eval = 1;
 
-                if ( not UNIVERSAL::isa( $response, 'HTTP::Response' ) ) {
-                    die "playback callback didn't return an HTTP::Response object";
+        $self->{ actions } = retrieve( $file );
+
+        $wrappers->{ pre } = wrap LWP::UserAgent::simple_request,
+            pre     => sub {
+                my ( $wrapped, $request ) = @_;
+
+                my $current = shift @{ $self->{ actions } };
+                if ( not defined $current ) {
+                    die "No further HTTP requests exist.  You possibly need to re-record the LWP session";
                 }
-            }
 
-            $_[ -1 ] = $response;
-        };
-} else {
-    wrap LWP::UserAgent::simple_request,
-        pre     => sub {
-            my ( $self, $request ) = @_;
+                my $response = $current->{ response };
 
-            $current_request = $request;
+                if ( $callbacks->{ playback_validation } ) {
+                    my $mock_request = $current->{ request };
 
-            if ( $callbacks->{ pre_record } ) {
-                $_[ -1 ] = $callbacks->{ pre_record }( $request );
-
-                if ( not UNIVERSAL::isa( $_[ -1 ], 'HTTP::Response' ) ) {
-                    die "pre-record callback didn't return an HTTP::Response object";
+                    $callbacks->{ playback_validation }( $request, $mock_request );
                 }
-            }
-        };
 
-    # It's intentional that wrap is called separately for this.  We want the
-    # post action to always be called, even if the pre-action short-circuits
-    # the request.  Otherwise, would need to duplicate the storing logic.
-    # This does mean that, when both pre- and post-record callbacks are being
-    # used, that the post-callback will take precedence.
+                if ( $callbacks->{ playback }) {
+                    $response = $callbacks->{ playback }( $request, $response );
 
-    wrap LWP::UserAgent::simple_request,
-        post    => sub {
-            my $response = $_[ -1 ];
-            if ( $callbacks->{ record }) {
-                $response = $callbacks->{ record }( $current_request, $response );
-
-                if ( not UNIVERSAL::isa( $response, 'HTTP::Response' ) ) {
-                    die "record callback didn't return an HTTP::Response object";
+                    if ( not UNIVERSAL::isa( $response, 'HTTP::Response' ) ) {
+                        die "playback callback didn't return an HTTP::Response object";
+                    }
                 }
-            }
 
-            if ( $action eq 'record' ) {
-                local $Storable::Eval = 1;
-                local $Storable::Deparse = 1;
+                $_[ -1 ] = $response;
+            };
+    } else {
+        $wrappers->{ pre } = wrap LWP::UserAgent::simple_request,
+            pre     => sub {
+                my ( $wrapped, $request ) = @_;
 
-                my $cloned = dclone {
-                    request     => $current_request,
-                    response    => $response
-                };
+                $self->{ current_request } = $request;
 
-                push @actions, $cloned;
-            }
-        };
+                if ( $callbacks->{ pre_record } ) {
+                    $_[ -1 ] = $callbacks->{ pre_record }( $request );
+
+                    if ( not UNIVERSAL::isa( $_[ -1 ], 'HTTP::Response' ) ) {
+                        die "pre-record callback didn't return an HTTP::Response object";
+                    }
+                }
+            };
+
+        # It's intentional that wrap is called separately for this.  We want the
+        # post action to always be called, even if the pre-action short-circuits
+        # the request.  Otherwise, would need to duplicate the storing logic.
+        # This does mean that, when both pre- and post-record callbacks are being
+        # used, that the post-callback will take precedence.
+
+        $wrappers->{ post } = wrap LWP::UserAgent::simple_request,
+            post    => sub {
+                my $response = $_[ -1 ];
+                if ( $callbacks->{ record }) {
+                    $response = $callbacks->{ record }(
+                        $self->{ current_request },
+                        $response
+                    );
+
+                    if ( not UNIVERSAL::isa( $response, 'HTTP::Response' ) ) {
+                        die "record callback didn't return an HTTP::Response object";
+                    }
+                }
+
+                if ( $action eq 'record' ) {
+                    local $Storable::Eval = 1;
+                    local $Storable::Deparse = 1;
+
+                    my $cloned = dclone {
+                        request     => $self->{ current_request },
+                        response    => $response
+                    };
+
+                    push @{ $self->{ actions } }, $cloned;
+                }
+            };
+    }
 }
 
 sub finished {
     my ( $class ) = @_;
 
+    my $action = $instance->{ action };
+
     if ( $action eq 'record' ) {
         local $Storable::Deparse = 1;
         local $Storable::Eval = 1;
 
-        nstore \@actions, $file;
-    } elsif ( $action eq 'playback' and scalar @actions ) {
+        nstore $instance->{ actions }, $instance->{ file };
+    } elsif ( $action eq 'playback' and scalar @{ $instance->{ actions } } ) {
         warn "Not all HTTP requests have been played back.  You possibly need to re-record the LWP session";
     }
+
+    $instance->{ actions } = [];
+    $instance->{ action } = 'passthrough';
+    $instance->{ file } = undef;
+
+    $instance->reset;
 }
 
 sub set_playback_callback {
     my ( $class, $cb ) = @_;
 
-    $callbacks->{ playback } = $cb;
+    $instance->__set_cb( playback => $cb );
 }
 
 sub set_record_callback {
     my ( $class, $cb ) = @_;
 
-    $callbacks->{ record } = $cb;
+    $instance->__set_cb( record => $cb );
 }
 
 sub set_record_pre_callback {
     my ( $class, $cb ) = @_;
 
-    $callbacks->{ pre_record } = $cb;
+    $instance->__set_cb( pre_record => $cb );
 }
 
 sub set_playback_validation_callback {
     my ( $class, $cb ) = @_;
 
-    $callbacks->{ playback_validation } = $cb;
+    $instance->__set_cb( playback_validation => $cb );
+}
+
+sub __set_cb {
+    my ( $self, $type, $cb ) = @_;
+
+    $self->{ callbacks }{ $type } = $cb;
 }
 
 1;
@@ -152,7 +210,7 @@ LWP::UserAgent::Mockable - Permits recording, and later playing back of LWP requ
 
 =head1 VERSION
 
-Version 1.01
+Version 1.10
 
 =head1 SYNOPSIS
 
@@ -203,7 +261,7 @@ As the initial impetus for this module was to allow mocking of external HTTP cal
 
 =head2 Methods
 
-As there are no instances of LWP::UserAgent::Mockable objects, all methods are class methods.
+As there is only a singleton instance of LWP::UserAgent::Mockable, all methods are class methods.
 
 =over 4
 
@@ -236,6 +294,10 @@ To clear the callback, pass in no argument.
 This callback allows validation of the received request.  It receives two parameters, both L<HTTP::Request>s, the first being the actual request made, the second being the mocked request that was received when recording a session.  It's up to the callback to do any validation that it wants, and to perform any action that is warranted.
 
 As with other callbacks, to clear, pass in no argument to the method.
+
+=item reset( <action>, <file> ) - optional
+
+Reset the state of mocker, allowing the action and file operation on to change.  Will also reset all callbacks.  Note that this will raise an error, if called whilst there are outstanding requests, and the B<finished> method hasn't been called.
 
 =back
 
